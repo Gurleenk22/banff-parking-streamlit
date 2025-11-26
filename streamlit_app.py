@@ -71,8 +71,7 @@ if page == "Overview":
             **How can Banff use real data to anticipate parking pressure and avoid full lots during the May–September tourist season?**
 
             This project combines:
-
-            - **Traffic & visits data** – how many vehicles are entering Banff  
+  
             - **Parking management data** – when and where people park  
             - **Weather data** – temperature, rain, and wind  
             - **Engineered features** – hour, weekday/weekend, lagged occupancy, rolling averages  
