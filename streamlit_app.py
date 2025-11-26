@@ -7,14 +7,12 @@ import shap
 from sklearn.inspection import PartialDependenceDisplay
 
 # ---------------------------------------------------
-# PAGE CONFIG
+# BASIC PAGE CONFIG
 # ---------------------------------------------------
 st.set_page_config(
     page_title="Banff Parking – ML & XAI Dashboard",
     layout="wide"
 )
-
-st.write("")  # small spacing
 
 # ---------------------------------------------------
 # LOAD MODELS + DATA (CACHED)
@@ -42,53 +40,121 @@ best_xgb_reg, best_xgb_cls, scaler, FEATURES, X_test_scaled, y_reg_test = load_m
 # ---------------------------------------------------
 # SIDEBAR NAVIGATION
 # ---------------------------------------------------
-st.sidebar.title("Navigation")
+st.sidebar.title("Banff Parking Dashboard")
+st.sidebar.markdown(
+    """
+    Use this app to:
+    - Explore hourly parking demand  
+    - Check which lots may be full  
+    - Understand the model using XAI  
+    """
+)
+
 page = st.sidebar.radio(
     "Go to",
     ["Overview", "Make Prediction", "Lot Status Overview", "XAI – Explainable AI"]
 )
 
 # ---------------------------------------------------
-# PAGE 1 – OVERVIEW
+# PAGE 1 – OVERVIEW (MORE ATTRACTIVE)
 # ---------------------------------------------------
 if page == "Overview":
-    st.title("Banff Parking Demand – Machine Learning Project")
+    st.title("🚗 Banff Parking Demand – Machine Learning Overview")
 
-    st.markdown(
-        """
-        This dashboard summarizes a Banff parking analytics project.
+    col_left, col_right = st.columns([1.4, 1])
 
-        **Project goals**
+    with col_left:
+        st.markdown(
+            """
+            ### Project Question
 
-        - Understand how **time**, **weather**, and **historical occupancy**
-          affect hourly parking demand.
-        - Predict **hourly occupancy** for Banff parking lots.
-        - Estimate the **probability that a lot is near full** (e.g., > 90%).
-        - Use **Explainable AI (XAI)** to show which features drive the model.
+            **How can Banff use real data to anticipate parking pressure and avoid full lots during the May–September tourist season?**
 
-        **Data sources used**
+            This project combines:
 
-        - Parking management data (transactions, stalls, lots/units).
-        - Visits / routes data that capture traffic arriving into Banff.
-        - Engineered features such as:
-          - Month, day of week, hour, weekend/weekday
-          - Lag occupancy (1-hour, 24-hour)
-          - Rolling averages
-          - Weather (temperature, precipitation, wind gust)
-        """
-    )
+            - **Traffic & visits data** – how many vehicles are entering Banff  
+            - **Parking management data** – when and where people park  
+            - **Weather data** – temperature, rain, and wind  
+            - **Engineered features** – hour, weekday/weekend, lagged occupancy, rolling averages  
+
+            A Gradient-boosted tree model (**XGBoost**) predicts:
+            - Hourly **occupancy level** for each lot  
+            - **Probability that a lot is near full** (> 90% capacity)  
+            """
+        )
+
+    with col_right:
+        st.markdown("### Quick Facts (from engineered data)")
+        kpi1, kpi2 = st.columns(2)
+        with kpi1:
+            st.metric("Tourist season", "May–September 2025")
+        with kpi2:
+            st.metric("Lots modelled", "Multiple Banff units")
+        kpi3, kpi4 = st.columns(2)
+        with kpi3:
+            st.metric("Target 1", "Hourly occupancy")
+        with kpi4:
+            st.metric("Target 2", "Full / Not-full")
+
+        st.markdown(
+            """
+            ✅ Models trained on **historical hourly data**  
+            ✅ Includes **time, weather, and history** features  
+            ✅ Deployed as this **Streamlit decision-support app**
+            """
+        )
+
+    st.markdown("---")
+
+    st.subheader("How to Use This App")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown(
+            """
+            **1. Make Prediction**  
+            - Choose a **lot & scenario**  
+            - Adjust **time & weather**  
+            - See:  
+              - Predicted occupancy  
+              - Probability the lot is full  
+              - Trend for the **next 6 hours**
+            """
+        )
+
+    with col2:
+        st.markdown(
+            """
+            **2. Lot Status Overview**  
+            - Select a **single hour**  
+            - Compare **all lots**  
+            - Status: 🟥 High risk full, 🟧 Busy, 🟩 Comfortable  
+            - Supports operational decisions & signage
+            """
+        )
+
+    with col3:
+        st.markdown(
+            """
+            **3. XAI – Explainable AI**  
+            - Global **SHAP** feature importance  
+            - **Partial Dependence Plots** (Hour, Month, Temp)  
+            - **Residual plot** to check model fit  
+            - Helps justify decisions to stakeholders
+            """
+        )
 
     st.info(
-        "Use the menu on the left to switch between: "
-        "**Overview**, **Make Prediction**, **Lot Status Overview**, "
-        "and **XAI – Explainable AI**."
+        "Tip: move between pages using the left sidebar. Start with "
+        "**Make Prediction** to see how the model behaves for different scenarios."
     )
 
 # ---------------------------------------------------
 # PAGE 2 – MAKE PREDICTION (IMPROVED & INTERACTIVE)
 # ---------------------------------------------------
 if page == "Make Prediction":
-    st.title("Interactive Parking Demand Prediction")
+    st.title("🎯 Interactive Parking Demand Prediction")
 
     st.markdown(
         """
@@ -99,7 +165,7 @@ if page == "Make Prediction":
         3. See:
            - Predicted **occupancy** for the selected hour  
            - **Probability** the lot is near full  
-           - A small chart of **predicted occupancy for the next 6 hours**
+           - A **trend for the next 6 hours** keeping weather & day constant
         """
     )
 
@@ -113,7 +179,7 @@ if page == "Make Prediction":
             "found in FEATURES. Lot selection is disabled; generic features only."
         )
 
-    # Scenario presets to make it easier for users
+    # Scenario presets
     scenario_options = {
         "Custom (use sliders below)": None,
         "Sunny Weekend Midday": {"month": 7, "dow": 5, "hour": 13,
@@ -179,9 +245,9 @@ if page == "Make Prediction":
     is_weekend = 1 if day_of_week in [5, 6] else 0
 
     st.caption(
-        "Lag features (previous-hour occupancy, rolling averages) are set to 0 "
-        "for manual scenarios. In a production system, these would come from "
-        "live data feeds."
+        "Lag features (previous-hour occupancy, rolling averages) are not entered manually. "
+        "For the 6-hour forecast we create a simple synthetic history using the model’s "
+        "own predictions."
     )
 
     # Build feature dict starting from all zeros
@@ -211,7 +277,7 @@ if page == "Make Prediction":
     x_vec = np.array([base_input[f] for f in FEATURES]).reshape(1, -1)
     x_scaled = scaler.transform(x_vec)
 
-    if st.button("Predict for this scenario"):
+    if st.button("🔮 Predict for this scenario"):
         # Current-hour predictions
         occ_pred = best_xgb_reg.predict(x_scaled)[0]
         full_prob = best_xgb_cls.predict_proba(x_scaled)[0, 1]
@@ -241,23 +307,51 @@ if page == "Make Prediction":
                 "Low risk of the lot being at full capacity for this hour."
             )
 
-        # Predict next 6 hours (simple what-if by changing Hour only)
+        # ---------------------------------------------------
+        # Predict next 6 hours – use previous predictions as lag features
+        # so the curve is not flat and includes synthetic history
+        # ---------------------------------------------------
         st.subheader("How does occupancy change over the next 6 hours?")
 
         hours = []
         occ_vals = []
 
+        # Start from the current prediction as the "latest" occupancy
+        prev_occ = occ_pred
+
+        # Initialise lag features (if they exist) with current prediction
+        occ_1hr = prev_occ
+        occ_24hr = prev_occ
+        roll3 = prev_occ
+
         for h_offset in range(0, 7):
             h_future = (hour + h_offset) % 24
+
             tmp_input = base_input.copy()
+
+            # update hour
             if "Hour" in tmp_input:
                 tmp_input["Hour"] = h_future
+
+            # synthetic history based on previous predictions
+            if "Occupancy_1hr_Ago" in tmp_input:
+                tmp_input["Occupancy_1hr_Ago"] = occ_1hr
+            if "Occupancy_24hr_Ago" in tmp_input:
+                tmp_input["Occupancy_24hr_Ago"] = occ_24hr
+            if "Occupancy_3hr_Roll_Avg" in tmp_input:
+                tmp_input["Occupancy_3hr_Roll_Avg"] = roll3
+
             x_future = np.array([tmp_input[f] for f in FEATURES]).reshape(1, -1)
             x_future_scaled = scaler.transform(x_future)
             occ_future = best_xgb_reg.predict(x_future_scaled)[0]
 
             hours.append(h_future)
             occ_vals.append(occ_future)
+
+            # update our "history" for the next step
+            occ_24hr = occ_1hr
+            occ_1hr = occ_future
+            roll3 = (roll3 * 2 + occ_future) / 3.0  # simple rolling average
 
         fig, ax = plt.subplots()
         ax.plot(hours, occ_vals, marker="o")
@@ -268,14 +362,15 @@ if page == "Make Prediction":
 
         st.caption(
             "Trend is generated by keeping weather and day constant while changing the hour. "
-            "This helps planners see how busy the lot is expected to be across the evening."
+            "Lag features are updated with previous predictions so the curve reflects "
+            "how demand might evolve within this scenario."
         )
 
 # ---------------------------------------------------
 # PAGE 3 – LOT STATUS OVERVIEW (ALL LOTS AT ONCE)
 # ---------------------------------------------------
 if page == "Lot Status Overview":
-    st.title("Lot Status Overview – Which Lots Are Likely Full?")
+    st.title("📊 Lot Status Overview – Which Lots Are Likely Full?")
 
     st.markdown(
         """
@@ -388,18 +483,17 @@ if page == "Lot Status Overview":
 # PAGE 4 – XAI (EXPLAINABLE AI)
 # ---------------------------------------------------
 if page == "XAI – Explainable AI":
-    st.title("Explainable AI – Understanding the Models")
+    st.title("🔍 Explainable AI – Understanding the Models")
 
     st.markdown(
         """
         This page explains **why** the models make their predictions,
         using Explainable AI tools:
 
-        - **SHAP summary plot**: which features contribute most to predictions.
-        - **SHAP bar plot**: global feature importance.
-        - **Partial Dependence Plots (PDPs)**: how changing one feature
-          affects predicted occupancy.
-        - **Residual plot**: how close predictions are to the true values.
+        - **SHAP summary plot**: which features contribute most to predictions  
+        - **SHAP bar plot**: overall feature importance  
+        - **Partial Dependence Plots (PDPs)**: effect of one feature at a time  
+        - **Residual plot**: how close predictions are to the true values  
         """
     )
 
