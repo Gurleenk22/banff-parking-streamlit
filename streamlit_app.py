@@ -6,6 +6,14 @@ import joblib
 import shap
 from sklearn.inspection import PartialDependenceDisplay
 
+# ==== RAG / Chatbot imports ====
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from openai import OpenAI
+import os
+
+client = OpenAI()  # uses OPENAI_API_KEY from environment / Streamlit secrets
+
 # ---------------------------------------------------
 # BASIC PAGE CONFIG
 # ---------------------------------------------------
@@ -38,6 +46,90 @@ def load_models_and_data():
 best_xgb_reg, best_xgb_cls, scaler, FEATURES, X_test_scaled, y_reg_test = load_models_and_data()
 
 # ---------------------------------------------------
+# RAG: LOAD KNOWLEDGE + BUILD VECTORIZER
+# ---------------------------------------------------
+@st.cache_resource
+def load_rag_knowledge():
+    """
+    Loads banff_knowledge.txt and builds TF-IDF vectors.
+    Each non-empty line is treated as a small document.
+    """
+    knowledge_path = "banff_knowledge.txt"
+
+    if not os.path.exists(knowledge_path):
+        # Fallback if file is missing
+        docs = [
+            "This is the Banff parking assistant. The banff_knowledge.txt file is missing, "
+            "so answers are based only on the language model and may not reflect project-specific findings."
+        ]
+    else:
+        with open(knowledge_path, "r", encoding="utf-8") as f:
+            docs = [line.strip() for line in f.readlines() if line.strip()]
+
+    vectorizer = TfidfVectorizer(stop_words="english")
+    doc_embeddings = vectorizer.fit_transform(docs)
+
+    return docs, vectorizer, doc_embeddings
+
+
+def retrieve_context(query, docs, vectorizer, doc_embeddings, k=5):
+    """
+    Returns top-k most relevant lines from the knowledge base for a given query.
+    """
+    query_vec = vectorizer.transform([query])
+    sims = cosine_similarity(query_vec, doc_embeddings).flatten()
+    top_idx = sims.argsort()[::-1][:k]
+    selected = [docs[i] for i in top_idx if sims[i] > 0.0]
+
+    if not selected:
+        return "No strong matches in the knowledge base. Answer based on general parking logic."
+
+    return "\n".join(selected)
+
+
+def generate_chat_answer(user_question, chat_history):
+    """
+    Calls OpenAI with retrieved context + short chat history.
+    """
+    docs, vectorizer, doc_embeddings = load_rag_knowledge()
+    context = retrieve_context(user_question, docs, vectorizer, doc_embeddings, k=5)
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a helpful assistant for a Banff parking analytics project. "
+                "You MUST use the provided 'Context' as your main source of truth. "
+                "If the context does not clearly contain the answer, say that directly "
+                "and give a short, reasonable guess based on typical parking behaviour."
+            ),
+        },
+        {
+            "role": "system",
+            "content": f"Context from project notes:\n{context}",
+        },
+    ]
+
+    # keep last few turns of history
+    for h in chat_history[-4:]:
+        messages.append(
+            {
+                "role": h["role"],
+                "content": h["content"],
+            }
+        )
+
+    messages.append({"role": "user", "content": user_question})
+
+    response = client.chat.completions.create(
+        model="gpt-4.1-mini",
+        messages=messages,
+        temperature=0.3,
+    )
+
+    return response.choices[0].message.content.strip()
+
+# ---------------------------------------------------
 # SIDEBAR NAVIGATION
 # ---------------------------------------------------
 st.sidebar.title("Banff Parking Dashboard")
@@ -47,12 +139,19 @@ st.sidebar.markdown(
     - Explore hourly parking demand  
     - Check which lots may be full  
     - Understand the model using XAI  
+    - Chat with a **parking assistant** using RAG  
     """
 )
 
 page = st.sidebar.radio(
     "Go to",
-    ["Overview", "Make Prediction", "Lot Status Overview", "XAI – Explainable AI"]
+    [
+        "Overview",
+        "Make Prediction",
+        "Lot Status Overview",
+        "XAI – Explainable AI",
+        "💬 Chat Assistant (RAG)",
+    ]
 )
 
 # ---------------------------------------------------
@@ -115,10 +214,7 @@ if page == "Overview":
             **1. Make Prediction**  
             - Choose a **lot & scenario**  
             - Adjust **time & weather**  
-            - See:  
-              - Predicted occupancy  
-              - Probability the lot is full  
-              - Trend for the **next 6 hours**
+            - See predicted occupancy & full-lot risk
             """
         )
 
@@ -307,8 +403,7 @@ if page == "Make Prediction":
             )
 
         # ---------------------------------------------------
-        # Predict next 6 hours – use previous predictions as lag features
-        # so the curve is not flat and includes synthetic history
+        # Predict next 6 hours – synthetic lag features
         # ---------------------------------------------------
         st.subheader("How does occupancy change over the next 6 hours?")
 
@@ -579,3 +674,60 @@ if page == "XAI – Explainable AI":
         )
     except Exception as e:
         st.error(f"Could not compute residuals: {e}")
+
+# ---------------------------------------------------
+# PAGE 5 – CHAT ASSISTANT (RAG)
+# ---------------------------------------------------
+if page == "💬 Chat Assistant (RAG)":
+    st.title("💬 Banff Parking Chat Assistant (RAG)")
+
+    st.markdown(
+        """
+        Ask questions about parking patterns, busy times, or model behaviour.
+
+        This chatbot uses **RAG (Retrieval-Augmented Generation)**:
+        1. It first retrieves relevant lines from your `banff_knowledge.txt` file  
+        2. Then it uses an OpenAI model to answer, grounded in that context  
+        """
+    )
+
+    # Initialize chat history
+    if "rag_chat_history" not in st.session_state:
+        st.session_state.rag_chat_history = []
+
+    # Show previous messages
+    for msg in st.session_state.rag_chat_history:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # User input
+    user_input = st.chat_input("Ask something about Banff parking...")
+
+    if user_input:
+        # Add user message to history
+        st.session_state.rag_chat_history.append(
+            {"role": "user", "content": user_input}
+        )
+        with st.chat_message("user"):
+            st.markdown(user_input)
+
+        # Assistant response
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking with project context..."):
+                try:
+                    answer = generate_chat_answer(
+                        user_input,
+                        st.session_state.rag_chat_history,
+                    )
+                except Exception as e:
+                    answer = f"Error calling the language model: {e}"
+                st.markdown(answer)
+
+        st.session_state.rag_chat_history.append(
+            {"role": "assistant", "content": answer}
+        )
+
+    st.caption(
+        "Tip: edit `banff_knowledge.txt` in your repo to control what the chatbot knows "
+        "about your EDA, feature engineering, and model findings."
+    )
