@@ -55,7 +55,7 @@ def load_rag_knowledge():
 
     if not os.path.exists(knowledge_path):
         docs = [
-            "This is the Banff parking assistant. The banff_knowledge.txt file is "
+            "This is Gurleen's Banff parking assistant. The banff_knowledge.txt file is "
             "missing, so answers are based only on general parking logic."
         ]
     else:
@@ -94,10 +94,13 @@ def generate_chat_answer(user_question, chat_history):
         {
             "role": "system",
             "content": (
-                "You are a helpful assistant for a Banff parking analytics project. "
-                "You MUST use the provided 'Context' as your main source of truth. "
-                "If the context does not clearly contain the answer, say that directly "
-                "and give a short, reasonable guess based on typical parking behaviour."
+                "You are a friendly project assistant helping Gurleen explain a Banff "
+                "parking analytics project. Speak clearly and simply, as if you are "
+                "presenting to classmates and instructors who are not data scientists. "
+                "Use the provided 'Context' from the project notes as your main source "
+                "of truth. If the context does not clearly contain the answer, say that "
+                "openly and give a short, reasonable guess based on typical parking "
+                "behaviour."
             ),
         },
         {
@@ -127,9 +130,11 @@ def generate_chat_answer(user_question, chat_history):
     except Exception:
         # Friendly fallback when quota is exhausted or API not reachable
         return (
-            "I couldn’t contact the language-model service (this usually means the "
-            "OpenAI API quota or free credits are exhausted for this key).\n\n"
-            "Here is the most relevant information I found in the project notes:\n\n"
+            "I couldn’t contact the language-model service right now "
+            "(this usually means the OpenAI API quota or free credits are used up "
+            "for this key).\n\n"
+            "Here is the most relevant information I can give based only on "
+            "the project notes:\n\n"
             f"{context}"
         )
 
@@ -518,18 +523,34 @@ if page == "Lot Status Overview":
             # sort by lot name so numbers are in sequence
             df = df.sort_values("Lot")
 
+            # ---------- nice colour styling ----------
+            def lot_status_row_style(row):
+                if "High risk" in row["Status"]:
+                    return ["background-color: #ffe5e5"] * len(row)  # light red
+                elif "Busy" in row["Status"]:
+                    return ["background-color: #fff4e0"] * len(row)  # light orange
+                else:
+                    return ["background-color: #e9f7ef"] * len(row)  # light green
+
+            styled_df = (
+                df.style
+                .format(
+                    {"Predicted occupancy": "{:.2f}",
+                     "Probability full": "{:.1%}"}
+                )
+                .apply(lot_status_row_style, axis=1)
+            )
+
             st.subheader("Step 2 – Lot status for selected hour")
             st.dataframe(
-                df.style.format(
-                    {"Predicted occupancy": "{:.2f}", "Probability full": "{:.1%}"}
-                ),
+                styled_df,
                 use_container_width=True,
             )
 
             st.caption(
                 "Lots are shown in numeric order (BANFF02, BANFF03, …). "
-                "You can change the sort in the code if you prefer to see "
-                "the highest-risk lots at the top."
+                "Row colour shows risk level: red = high risk, orange = busy, "
+                "green = comfortable."
             )
 
 # ---------------------------------------------------
