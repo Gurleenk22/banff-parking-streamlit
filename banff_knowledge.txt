@@ -1,0 +1,7 @@
+Bear Street Parkade L1 reaches its highest average occupancy between 11 AM and 3 PM on weekends in July and August.
+Central Park Lot has medium occupancy but rarely reaches full capacity.
+Buffalo and Banff lots tend to fill quickly on sunny summer weekends between 10 AM and 2 PM.
+Rainy days usually reduce overall occupancy across most lots.
+Weekdays generally have lower occupancy than weekends, especially in early mornings and late evenings.
+The classification model predicts whether a lot is near full based on weather, hour, day of week, capacity and recent occupancy.
+The regression model predicts hourly occupancy counts, with temperature and month among the most important features.
