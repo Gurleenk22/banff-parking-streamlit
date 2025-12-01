@@ -12,7 +12,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from openai import OpenAI
 import os
 
-client = OpenAI()  # uses OPENAI_API_KEY from environment / Streamlit secrets
+client = OpenAI()  # uses OPENAI_API_KEY from env / Streamlit secrets
 
 # ---------------------------------------------------
 # BASIC PAGE CONFIG
@@ -27,10 +27,7 @@ st.set_page_config(
 # ---------------------------------------------------
 @st.cache_resource
 def load_models_and_data():
-    """
-    Load trained models, scaler, feature list, and test data.
-    Filenames must match those in the GitHub repo.
-    """
+    """Load trained models, scaler, feature list, and test data."""
     reg = joblib.load("banff_best_xgb_reg.pkl")      # XGBoost regressor
     cls = joblib.load("banff_best_xgb_cls.pkl")      # XGBoost classifier
     scaler = joblib.load("banff_scaler.pkl")         # Scaler used in training
@@ -57,10 +54,9 @@ def load_rag_knowledge():
     knowledge_path = "banff_knowledge.txt"
 
     if not os.path.exists(knowledge_path):
-        # Fallback if file is missing
         docs = [
-            "This is the Banff parking assistant. The banff_knowledge.txt file is missing, "
-            "so answers are based only on the language model and may not reflect project-specific findings."
+            "This is the Banff parking assistant. The banff_knowledge.txt file is "
+            "missing, so answers are based only on general parking logic."
         ]
     else:
         with open(knowledge_path, "r", encoding="utf-8") as f:
@@ -73,9 +69,7 @@ def load_rag_knowledge():
 
 
 def retrieve_context(query, docs, vectorizer, doc_embeddings, k=5):
-    """
-    Returns top-k most relevant lines from the knowledge base for a given query.
-    """
+    """Returns top-k most relevant lines from the knowledge base."""
     query_vec = vectorizer.transform([query])
     sims = cosine_similarity(query_vec, doc_embeddings).flatten()
     top_idx = sims.argsort()[::-1][:k]
@@ -90,6 +84,8 @@ def retrieve_context(query, docs, vectorizer, doc_embeddings, k=5):
 def generate_chat_answer(user_question, chat_history):
     """
     Calls OpenAI with retrieved context + short chat history.
+    If the API fails (e.g., insufficient_quota), fall back to
+    a simple answer built only from the retrieved context.
     """
     docs, vectorizer, doc_embeddings = load_rag_knowledge()
     context = retrieve_context(user_question, docs, vectorizer, doc_embeddings, k=5)
@@ -121,13 +117,21 @@ def generate_chat_answer(user_question, chat_history):
 
     messages.append({"role": "user", "content": user_question})
 
-    response = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        messages=messages,
-        temperature=0.3,
-    )
-
-    return response.choices[0].message.content.strip()
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=messages,
+            temperature=0.3,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception:
+        # Friendly fallback when quota is exhausted or API not reachable
+        return (
+            "I couldn’t contact the language-model service (this usually means the "
+            "OpenAI API quota or free credits are exhausted for this key).\n\n"
+            "Here is the most relevant information I found in the project notes:\n\n"
+            f"{context}"
+        )
 
 # ---------------------------------------------------
 # SIDEBAR NAVIGATION
@@ -155,7 +159,7 @@ page = st.sidebar.radio(
 )
 
 # ---------------------------------------------------
-# PAGE 1 – OVERVIEW (MORE ATTRACTIVE)
+# PAGE 1 – OVERVIEW
 # ---------------------------------------------------
 if page == "Overview":
     st.title("🚗 Banff Parking Demand – Machine Learning Overview")
@@ -246,7 +250,7 @@ if page == "Overview":
     )
 
 # ---------------------------------------------------
-# PAGE 2 – MAKE PREDICTION (IMPROVED & INTERACTIVE)
+# PAGE 2 – MAKE PREDICTION (NO FUTURE GRAPH)
 # ---------------------------------------------------
 if page == "Make Prediction":
     st.title("🎯 Interactive Parking Demand Prediction")
@@ -260,13 +264,19 @@ if page == "Make Prediction":
         3. See:
            - Predicted **occupancy** for the selected hour  
            - **Probability** the lot is near full  
-           - A **trend for the next 6 hours** keeping weather & day constant
         """
     )
 
     # Find lot indicator features (one-hot encoded units)
     lot_features = [f for f in FEATURES if f.startswith("Unit_")]
     lot_display_names = [lf.replace("Unit_", "").replace("_", " ") for lf in lot_features]
+
+    # Sort lot list alphabetically so numbers appear in order (BANFF02, BANFF03, …)
+    if lot_features:
+        lot_pairs = sorted(zip(lot_features, lot_display_names), key=lambda x: x[1])
+        lot_features, lot_display_names = zip(*lot_pairs)
+        lot_features = list(lot_features)
+        lot_display_names = list(lot_display_names)
 
     if not lot_features:
         st.warning(
@@ -340,9 +350,8 @@ if page == "Make Prediction":
     is_weekend = 1 if day_of_week in [5, 6] else 0
 
     st.caption(
-        "Lag features (previous-hour occupancy, rolling averages) are not entered manually. "
-        "For the 6-hour forecast we create a simple synthetic history using the model’s "
-        "own predictions."
+        "Lag features (previous-hour occupancy, rolling averages) are set automatically "
+        "by the model and are not entered manually here."
     )
 
     # Build feature dict starting from all zeros
@@ -402,64 +411,6 @@ if page == "Make Prediction":
                 "Low risk of the lot being at full capacity for this hour."
             )
 
-        # ---------------------------------------------------
-        # Predict next 6 hours – synthetic lag features
-        # ---------------------------------------------------
-        st.subheader("How does occupancy change over the next 6 hours?")
-
-        hours = []
-        occ_vals = []
-
-        # Start from the current prediction as the "latest" occupancy
-        prev_occ = occ_pred
-
-        # Initialise lag features (if they exist) with current prediction
-        occ_1hr = prev_occ
-        occ_24hr = prev_occ
-        roll3 = prev_occ
-
-        for h_offset in range(0, 7):
-            h_future = (hour + h_offset) % 24
-
-            tmp_input = base_input.copy()
-
-            # update hour
-            if "Hour" in tmp_input:
-                tmp_input["Hour"] = h_future
-
-            # synthetic history based on previous predictions
-            if "Occupancy_1hr_Ago" in tmp_input:
-                tmp_input["Occupancy_1hr_Ago"] = occ_1hr
-            if "Occupancy_24hr_Ago" in tmp_input:
-                tmp_input["Occupancy_24hr_Ago"] = occ_24hr
-            if "Occupancy_3hr_Roll_Avg" in tmp_input:
-                tmp_input["Occupancy_3hr_Roll_Avg"] = roll3
-
-            x_future = np.array([tmp_input[f] for f in FEATURES]).reshape(1, -1)
-            x_future_scaled = scaler.transform(x_future)
-            occ_future = best_xgb_reg.predict(x_future_scaled)[0]
-
-            hours.append(h_future)
-            occ_vals.append(occ_future)
-
-            # update our "history" for the next step
-            occ_24hr = occ_1hr
-            occ_1hr = occ_future
-            roll3 = (roll3 * 2 + occ_future) / 3.0  # simple rolling average
-
-        fig, ax = plt.subplots()
-        ax.plot(hours, occ_vals, marker="o")
-        ax.set_xlabel("Hour of Day")
-        ax.set_ylabel("Predicted Occupancy")
-        ax.set_title(f"Predicted Occupancy Trend – {selected_lot_label or 'Selected Lot'}")
-        st.pyplot(fig)
-
-        st.caption(
-            "Trend is generated by keeping weather and day constant while changing the hour. "
-            "Lag features are updated with previous predictions so the curve reflects "
-            "how demand might evolve within this scenario."
-        )
-
 # ---------------------------------------------------
 # PAGE 3 – LOT STATUS OVERVIEW (ALL LOTS AT ONCE)
 # ---------------------------------------------------
@@ -476,9 +427,15 @@ if page == "Lot Status Overview":
         """
     )
 
-    # Find lot-related features (one-hot encoded units)
     lot_features = [f for f in FEATURES if f.startswith("Unit_")]
     lot_display_names = [lf.replace("Unit_", "").replace("_", " ") for lf in lot_features]
+
+    # sort lots alphabetically so numbers are in sequence
+    if lot_features:
+        lot_pairs = sorted(zip(lot_features, lot_display_names), key=lambda x: x[1])
+        lot_features, lot_display_names = zip(*lot_pairs)
+        lot_features = list(lot_features)
+        lot_display_names = list(lot_display_names)
 
     if not lot_features:
         st.error(
@@ -558,7 +515,8 @@ if page == "Lot Status Overview":
                 )
 
             df = pd.DataFrame(rows)
-            df = df.sort_values("Probability full", ascending=False)
+            # sort by lot name so numbers are in sequence
+            df = df.sort_values("Lot")
 
             st.subheader("Step 2 – Lot status for selected hour")
             st.dataframe(
@@ -569,8 +527,9 @@ if page == "Lot Status Overview":
             )
 
             st.caption(
-                "Lots at the top have the highest probability of being near capacity. "
-                "This helps planners direct vehicles to less busy areas."
+                "Lots are shown in numeric order (BANFF02, BANFF03, …). "
+                "You can change the sort in the code if you prefer to see "
+                "the highest-risk lots at the top."
             )
 
 # ---------------------------------------------------
@@ -714,13 +673,10 @@ if page == "💬 Chat Assistant (RAG)":
         # Assistant response
         with st.chat_message("assistant"):
             with st.spinner("Thinking with project context..."):
-                try:
-                    answer = generate_chat_answer(
-                        user_input,
-                        st.session_state.rag_chat_history,
-                    )
-                except Exception as e:
-                    answer = f"Error calling the language model: {e}"
+                answer = generate_chat_answer(
+                    user_input,
+                    st.session_state.rag_chat_history,
+                )
                 st.markdown(answer)
 
         st.session_state.rag_chat_history.append(
