@@ -1,8 +1,12 @@
 streamlit
+openai>=1.12.0
+langchain
+langchain-community
+faiss-cpu
+tiktoken
 numpy
 pandas
 scikit-learn
-xgboost
 matplotlib
 joblib
 shap
