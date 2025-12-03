@@ -305,10 +305,10 @@ if page == "App Guide – What This Dashboard Does":
             **Outputs on the right:**
             - **Predicted occupancy (model units)** – higher value = more cars  
             - **Probability the lot is near full** – shown as a percentage  
-            - Colour message:
-              - 🟥 High risk full  
-              - 🟧 Moderate / busy  
-              - 🟩 Low risk  
+            - Message:
+              - High risk full  
+              - Moderate / busy  
+              - Low risk  
 
             You can talk about this page as:  
             *“Here the operations team can test different ‘what-if’ cases for a single lot
