@@ -156,6 +156,7 @@ page = st.sidebar.radio(
     "Go to",
     [
         "Overview",
+        "App Guide – What This Dashboard Does",
         "Make Prediction",
         "Lot Status Overview",
         "XAI – Explainable AI",
@@ -251,11 +252,200 @@ if page == "Overview":
 
     st.info(
         "Tip: move between pages using the left sidebar. Start with "
+        "**App Guide** if you want an explanation of all pages; then try "
         "**Make Prediction** to see how the model behaves for different scenarios."
     )
 
 # ---------------------------------------------------
-# PAGE 2 – MAKE PREDICTION (NO FUTURE GRAPH)
+# PAGE 2 – APP GUIDE (NEW PAGE)
+# ---------------------------------------------------
+if page == "App Guide – What This Dashboard Does":
+    st.title("📘 App Guide – What Each Page Shows")
+
+    st.markdown(
+        """
+        This page is like a tour guide for your dashboard.  
+        It explains, in simple language, what happens on the other pages and
+        how an operator or instructor should use them.
+        """
+    )
+
+    st.markdown("### 🎯 Big Picture – What problem are we solving?")
+    st.markdown(
+        """
+        Banff gets very busy in the tourist season. When parking lots suddenly fill up,
+        visitors get frustrated and traffic becomes messy.
+
+        This dashboard uses **machine learning** to:
+        - Predict **how full each lot will be** at a specific hour  
+        - Estimate the **risk that a lot is near full**  
+        - Help staff **redirect visitors** to quieter lots  
+        - Explain *why* the model thinks a lot will be busy (XAI)
+        """
+    )
+
+    st.markdown("---")
+
+    # --- Make Prediction explanation ---
+    st.subheader("1️⃣ Make Prediction – “What if” for one parking lot")
+    col1, col2 = st.columns([1.4, 1])
+
+    with col1:
+        st.markdown(
+            """
+            On this page you simulate one specific parking lot.
+
+            **Inputs on the left:**
+            - Select a **parking lot** from the list (e.g., *BANFF02 – WOLF AT MARTEN*)  
+            - Pick a **scenario** like *Sunny Weekend Midday* or *Rainy Weekday Afternoon*  
+            - Adjust sliders for:
+              - Month, day of week, hour  
+              - Temperature, rain, and wind  
+
+            **Outputs on the right:**
+            - **Predicted occupancy (model units)** – higher value = more cars  
+            - **Probability the lot is near full** – shown as a percentage  
+            - Colour message:
+              - 🟥 High risk full  
+              - 🟧 Moderate / busy  
+              - 🟩 Low risk  
+
+            You can talk about this page as:  
+            *“Here the operations team can test different ‘what-if’ cases for a single lot
+            before a busy day, so they know where pressure will build up first.”*
+            """
+        )
+
+    with col2:
+        st.markdown("**Good questions to explore on this page:**")
+        st.markdown(
+            """
+            - *What happens to BANFF02 on a sunny Saturday at 2pm?*  
+            - *How does the risk change if the weather is cold and rainy?*  
+            - *Which lot stays comfortable longer in the evening?*
+            """
+        )
+
+    st.markdown("---")
+
+    # --- Lot Status Overview explanation ---
+    st.subheader("2️⃣ Lot Status Overview – Compare all lots at once")
+    col3, col4 = st.columns([1.4, 1])
+
+    with col3:
+        st.markdown(
+            """
+            This page answers: **“At this hour, which lots are in trouble?”**
+
+            **Inputs:**
+            - One set of sliders for **time and weather** (month, day, hour, temp, rain, wind)  
+
+            **Outputs:**
+            - A table where **each row is a parking lot**  
+            - For every lot you see:
+              - Predicted occupancy  
+              - Probability the lot is full  
+              - Status with colour:
+                - 🟥 High risk full (row tinted light red)  
+                - 🟧 Busy (row tinted light orange)  
+                - 🟩 Comfortable (row tinted light green)  
+
+            Lots are shown in **numeric order**, so BANFF02, BANFF03, BANFF04, etc.,
+            are easy to read as a group.
+            """
+        )
+
+    with col4:
+        st.markdown("**How staff could use this page:**")
+        st.markdown(
+            """
+            - Quickly check the **next hour** before a shift starts  
+            - Decide where to place **signs or staff** to redirect cars  
+            - Spot **which lots usually hit high risk first** during busy days
+            """
+        )
+
+    st.markdown("---")
+
+    # --- XAI explanation ---
+    st.subheader("3️⃣ XAI – Explainable AI – Why the model makes these predictions")
+    col5, col6 = st.columns([1.4, 1])
+
+    with col5:
+        st.markdown(
+            """
+            This page is for explaining the **logic behind the model** to instructors,
+            stakeholders, or anyone who asks *“Why should we trust this?”*  
+
+            It includes:
+
+            - **SHAP Summary Plot**  
+              Shows which features (Hour, Month, Weather, etc.) push predictions
+              up or down. Each dot is one observation.
+
+            - **SHAP Bar Plot (Feature Importance)**  
+              Ranks features by how much they influence occupancy overall.
+
+            - **Partial Dependence Plots (PDPs)**  
+              Show the *average effect* of one feature at a time
+              (e.g., how occupancy changes through the day, or by temperature).
+
+            - **Residual Plot**  
+              Compares predicted vs actual values. If the points are spread around
+              the zero line, the model is not heavily biased.
+            """
+        )
+
+    with col6:
+        st.markdown("**Nice talking points here:**")
+        st.markdown(
+            """
+            - *“Hour of the day and month of the year are the strongest drivers.”*  
+            - *“Weather has an effect – on cold or rainy days occupancy is different.”*  
+            - *“Residuals show the model is generally accurate without big bias.”*
+            """
+        )
+
+    st.markdown("---")
+
+    # --- Chat assistant explanation ---
+    st.subheader("4️⃣ Chat Assistant (RAG) – Ask questions in plain English")
+    col7, col8 = st.columns([1.4, 1])
+
+    with col7:
+        st.markdown(
+            """
+            This page turns the project notes into a **question-answer helper**.
+
+            Behind the scenes it:
+            1. Reads lines from `banff_knowledge.txt` (your project notes).  
+            2. Finds the most relevant lines for the user’s question.  
+            3. Uses an OpenAI model to write a friendly answer, grounded in those notes.  
+
+            This is useful when someone asks:
+            - *“Which lots usually get full first?”*  
+            - *“What variables did you include in the model?”*  
+            - *“How did you clean the data?”*
+            """
+        )
+
+    with col8:
+        st.markdown("**Example questions you can type live in class:**")
+        st.markdown(
+            """
+            - *“Explain in simple words how this model predicts parking demand.”*  
+            - *“Why did we choose XGBoost instead of a simple linear model?”*  
+            - *“How could Banff staff actually use these predictions day-to-day?”*
+            """
+        )
+
+    st.success(
+        "During your presentation you can start on this page, give a quick tour of "
+        "each part of the dashboard, and then jump into a live demo on the other pages."
+    )
+
+# ---------------------------------------------------
+# PAGE 3 – MAKE PREDICTION (NO FUTURE GRAPH)
 # ---------------------------------------------------
 if page == "Make Prediction":
     st.title("🎯 Interactive Parking Demand Prediction")
@@ -347,8 +537,10 @@ if page == "Make Prediction":
     with col2:
         max_temp = st.slider("Max Temperature (°C)",
                              -20.0, 40.0, float(default_vals["max_temp"]))
+
         total_precip = st.slider("Total Precipitation (mm)",
                                  0.0, 30.0, float(default_vals["precip"]))
+
         wind_gust = st.slider("Speed of Max Gust (km/h)",
                               0.0, 100.0, float(default_vals["gust"]))
 
@@ -417,7 +609,7 @@ if page == "Make Prediction":
             )
 
 # ---------------------------------------------------
-# PAGE 3 – LOT STATUS OVERVIEW (ALL LOTS AT ONCE)
+# PAGE 4 – LOT STATUS OVERVIEW (ALL LOTS AT ONCE)
 # ---------------------------------------------------
 if page == "Lot Status Overview":
     st.title("📊 Lot Status Overview – Which Lots Are Likely Full?")
@@ -554,7 +746,7 @@ if page == "Lot Status Overview":
             )
 
 # ---------------------------------------------------
-# PAGE 4 – XAI (EXPLAINABLE AI)
+# PAGE 5 – XAI (EXPLAINABLE AI)
 # ---------------------------------------------------
 if page == "XAI – Explainable AI":
     st.title("🔍 Explainable AI – Understanding the Models")
@@ -656,7 +848,7 @@ if page == "XAI – Explainable AI":
         st.error(f"Could not compute residuals: {e}")
 
 # ---------------------------------------------------
-# PAGE 5 – CHAT ASSISTANT (RAG)
+# PAGE 6 – CHAT ASSISTANT (RAG)
 # ---------------------------------------------------
 if page == "💬 Chat Assistant (RAG)":
     st.title("💬 Banff Parking Chat Assistant (RAG)")
