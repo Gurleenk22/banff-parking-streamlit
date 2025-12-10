@@ -683,7 +683,8 @@ if page == "💬 Chat Assistant (RAG)":
             {"role": "assistant", "content": answer}
         )
 
-    st.caption(
+        st.caption(
         "Tip: edit banff_knowledge.txt in your repo to control what the chatbot knows "
         "about your EDA, feature engineering, and model findings."
-    )
+    )
+
