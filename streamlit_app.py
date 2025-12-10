@@ -375,4 +375,291 @@ if page == "Make Prediction":
 
         s1, s2, s3, s4, s5, s6 = st.columns(6)
         with s1:
-            month = st.slider("Month", 1, 12, int(default_vals["month"]()_
+            month = st.slider("Month", 1, 12, int(default_vals["month"]))
+        with s2:
+            day_of_week = st.slider("Day (0=Mon,6=Sun)", 0, 6, int(default_vals["dow"]))
+        with s3:
+            hour = st.slider("Hour", 0, 23, int(default_vals["hour"]))
+        with s4:
+            max_temp = st.slider("Max Temp °C", -20.0, 40.0,
+                                 float(default_vals["max_temp"]))
+        with s5:
+            total_precip = st.slider("Precip mm", 0.0, 30.0,
+                                     float(default_vals["precip"]))
+        with s6:
+            wind_gust = st.slider("Max Gust km/h", 0.0, 100.0,
+                                  float(default_vals["gust"]))
+
+        is_weekend = 1 if day_of_week in [5, 6] else 0
+
+        st.caption("Lag features (previous occupancy, rolling means) are handled inside the model.")
+
+        # --- Build input vector ---
+        base_input = {f: 0 for f in FEATURES}
+        if "Month" in base_input:
+            base_input["Month"] = month
+        if "DayOfWeek" in base_input:
+            base_input["DayOfWeek"] = day_of_week
+        if "Hour" in base_input:
+            base_input["Hour"] = hour
+        if "IsWeekend" in base_input:
+            base_input["IsWeekend"] = is_weekend
+        if "Max Temp (°C)" in base_input:
+            base_input["Max Temp (°C)"] = max_temp
+        if "Total Precip (mm)" in base_input:
+            base_input["Total Precip (mm)"] = total_precip
+        if "Spd of Max Gust (km/h)" in base_input:
+            base_input["Spd of Max Gust (km/h)"] = wind_gust
+
+        if selected_lot_feature in base_input:
+            base_input[selected_lot_feature] = 1
+
+        x_vec = np.array([base_input[f] for f in FEATURES]).reshape(1, -1)
+        x_scaled = scaler.transform(x_vec)
+
+        if st.button("🔮 Predict for this scenario"):
+            occ_pred = float(best_xgb_reg.predict(x_scaled)[0])
+            full_prob, status = occupancy_to_risk(occ_pred)
+
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.markdown(
+                    f"""
+                    <div class="card">
+                      <div class="metric-label">Lot</div>
+                      <div class="metric-value">{selected_lot_label}</div>
+                      <div class="metric-sub">Month {month}, hour {hour}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with c2:
+                st.markdown(
+                    f"""
+                    <div class="card">
+                      <div class="metric-label">Predicted occupancy</div>
+                      <div class="metric-value">{occ_pred:.2f}</div>
+                      <div class="metric-sub">Model units (higher = busier)</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with c3:
+                st.markdown(
+                    f"""
+                    <div class="card">
+                      <div class="metric-label">Risk level</div>
+                      <div class="metric-value">{full_prob:.0%}</div>
+                      <div class="metric-sub">{status}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            if "High risk" in status:
+                st.warning("⚠️ High chance this lot will be near full. Consider redirecting drivers.")
+            elif "Busy" in status:
+                st.info("Moderate risk – useful to monitor and guide visitors.")
+            else:
+                st.success("Low risk – this lot should be comfortable at that time.")
+
+# ===================================================
+# PAGE 3 – LOT STATUS OVERVIEW (ALL LOTS)
+# ===================================================
+if page == "Lot Status Overview":
+    st.title("📊 Lot Status Overview – All Lots, One Hour")
+
+    st.caption("Pick one set of conditions, then compare risk across all lots.")
+
+    lot_features, lot_display_names = get_lot_features()
+
+    if not lot_features:
+        st.error(
+            "No parking-lot indicator features (starting with 'Unit_') were "
+            "found in FEATURES. This view needs those to work."
+        )
+    else:
+        s1, s2, s3, s4, s5, s6 = st.columns(6)
+        with s1:
+            month = st.slider("Month", 1, 12, 7)
+        with s2:
+            day_of_week = st.slider("Day (0=Mon,6=Sun)", 0, 6, 5)
+        with s3:
+            hour = st.slider("Hour", 0, 23, 14)
+        with s4:
+            max_temp = st.slider("Max Temp °C", -20.0, 40.0, 22.0)
+        with s5:
+            total_precip = st.slider("Precip mm", 0.0, 30.0, 0.5)
+        with s6:
+            wind_gust = st.slider("Max Gust km/h", 0.0, 100.0, 12.0)
+
+        is_weekend = 1 if day_of_week in [5, 6] else 0
+
+        if st.button("Compute lot status"):
+            base_input = {f: 0 for f in FEATURES}
+            if "Month" in base_input:
+                base_input["Month"] = month
+            if "DayOfWeek" in base_input:
+                base_input["DayOfWeek"] = day_of_week
+            if "Hour" in base_input:
+                base_input["Hour"] = hour
+            if "IsWeekend" in base_input:
+                base_input["IsWeekend"] = is_weekend
+            if "Max Temp (°C)" in base_input:
+                base_input["Max Temp (°C)"] = max_temp
+            if "Total Precip (mm)" in base_input:
+                base_input["Total Precip (mm)"] = total_precip
+            if "Spd of Max Gust (km/h)" in base_input:
+                base_input["Spd of Max Gust (km/h)"] = wind_gust
+
+            rows = []
+            for lot_feat, lot_name in zip(lot_features, lot_display_names):
+                lot_input = base_input.copy()
+                if lot_feat in lot_input:
+                    lot_input[lot_feat] = 1
+
+                x_vec = np.array([lot_input[f] for f in FEATURES]).reshape(1, -1)
+                x_scaled = scaler.transform(x_vec)
+
+                occ_pred = float(best_xgb_reg.predict(x_scaled)[0])
+                full_prob, status = occupancy_to_risk(occ_pred)
+
+                rows.append(
+                    {
+                        "Lot": lot_name,
+                        "Predicted occupancy": occ_pred,
+                        "Probability full": full_prob,
+                        "Status": status,
+                    }
+                )
+
+            df = pd.DataFrame(rows).sort_values("Lot")
+
+            def lot_status_row_style(row):
+                if "High risk" in row["Status"]:
+                    return ["background-color: #fee2e2"] * len(row)
+                elif "Busy" in row["Status"]:
+                    return ["background-color: #ffedd5"] * len(row)
+                else:
+                    return ["background-color: #e5f6e9"] * len(row)
+
+            styled_df = (
+                df.style
+                .format(
+                    {"Predicted occupancy": "{:.2f}",
+                     "Probability full": "{:.0%}"}
+                )
+                .apply(lot_status_row_style, axis=1)
+            )
+
+            st.dataframe(styled_df, use_container_width=True)
+
+# ===================================================
+# PAGE 4 – XAI (EXPLAINABLE AI)
+# ===================================================
+if page == "XAI – Explainable AI":
+    st.title("🔍 Explainable AI – Model Insights")
+
+    st.caption("Global explanations for the occupancy regression model.")
+
+    st.subheader("SHAP Summary – Regression Model (Occupancy)")
+    try:
+        explainer_reg = shap.TreeExplainer(best_xgb_reg)
+        shap_values_reg = explainer_reg.shap_values(X_test_scaled)
+
+        fig1, _ = plt.subplots()
+        shap.summary_plot(
+            shap_values_reg,
+            X_test_scaled,
+            feature_names=FEATURES,
+            show=False
+        )
+        st.pyplot(fig1)
+
+        st.subheader("SHAP Feature Importance – Regression")
+        fig2, _ = plt.subplots()
+        shap.summary_plot(
+            shap_values_reg,
+            X_test_scaled,
+            feature_names=FEATURES,
+            plot_type="bar",
+            show=False
+        )
+        st.pyplot(fig2)
+    except Exception as e:
+        st.error(f"Could not generate SHAP plots: {e}")
+
+    st.subheader("Partial Dependence – Key Features")
+    pd_feature_names = [n for n in ["Max Temp (°C)", "Month", "Hour"] if n in FEATURES]
+
+    if pd_feature_names:
+        feature_indices = [FEATURES.index(f) for f in pd_feature_names]
+        fig3, ax3 = plt.subplots(figsize=(10, 4))
+        PartialDependenceDisplay.from_estimator(
+            best_xgb_reg,
+            X_test_scaled,
+            feature_indices,
+            feature_names=FEATURES,
+            ax=ax3
+        )
+        st.pyplot(fig3)
+    else:
+        st.info("Configured PDP features not found in FEATURES list.")
+
+    st.subheader("Residual Plot – Regression Model")
+    try:
+        y_pred = best_xgb_reg.predict(X_test_scaled)
+        residuals = y_reg_test - y_pred
+
+        fig4, ax4 = plt.subplots()
+        ax4.scatter(y_pred, residuals, alpha=0.3)
+        ax4.axhline(0, color="red", linestyle="--")
+        ax4.set_xlabel("Predicted Occupancy")
+        ax4.set_ylabel("Residual (Actual - Predicted)")
+        st.pyplot(fig4)
+    except Exception as e:
+        st.error(f"Could not compute residuals: {e}")
+
+# ===================================================
+# PAGE 5 – CHAT ASSISTANT (RAG)
+# ===================================================
+if page == "💬 Chat Assistant (RAG)":
+    st.title("💬 Banff Parking Chat Assistant (RAG)")
+
+    st.caption(
+        "Ask questions about parking patterns, busy times, or how the model works. "
+        "The assistant uses your `banff_knowledge.txt` file as context."
+    )
+
+    if "rag_chat_history" not in st.session_state:
+        st.session_state.rag_chat_history = []
+
+    for msg in st.session_state.rag_chat_history:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    user_input = st.chat_input("Ask something about Banff parking...")
+
+    if user_input:
+        st.session_state.rag_chat_history.append(
+            {"role": "user", "content": user_input}
+        )
+        with st.chat_message("user"):
+            st.markdown(user_input)
+
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking with project context..."):
+                answer = generate_chat_answer(
+                    user_input,
+                    st.session_state.rag_chat_history,
+                )
+                st.markdown(answer)
+
+        st.session_state.rag_chat_history.append(
+            {"role": "assistant", "content": answer}
+        )
+
+    st.caption(
+        "Edit `banff_knowledge.txt` in your repo to control what the chatbot knows "
+        "about your EDA, feature engineering, and model findings."
+    )
