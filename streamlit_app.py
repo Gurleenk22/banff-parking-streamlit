@@ -43,6 +43,51 @@ def load_models_and_data():
 best_xgb_reg, best_xgb_cls, scaler, FEATURES, X_test_scaled, y_reg_test = load_models_and_data()
 
 # ---------------------------------------------------
+# SANITY CHECK: MODELS vs FEATURES
+# ---------------------------------------------------
+def validate_model_feature_alignment():
+    """Make sure models, FEATURES list, and scaler all agree on feature count."""
+    problems = []
+
+    n_feat = len(FEATURES)
+
+    cls_n = getattr(best_xgb_cls, "n_features_in_", None)
+    reg_n = getattr(best_xgb_reg, "n_features_in_", None)
+
+    if cls_n is not None and cls_n != n_feat:
+        problems.append(
+            f"• Classifier expects {cls_n} features but FEATURES has {n_feat}."
+        )
+
+    if reg_n is not None and reg_n != n_feat:
+        problems.append(
+            f"• Regressor expects {reg_n} features but FEATURES has {n_feat}."
+        )
+
+    # Try a dummy transform to check scaler shape
+    try:
+        _dummy = np.zeros((1, n_feat))
+        _ = scaler.transform(_dummy)
+    except Exception as e:
+        problems.append(f"• Scaler cannot transform a vector of length {n_feat}: {e}")
+
+    if problems:
+        st.error(
+            "❌ Model / feature mismatch detected.\n\n"
+            + "\n".join(problems)
+            + "\n\n**Fix:** Open your training notebook and re-save, from the SAME run:\n"
+            "- `banff_best_xgb_reg.pkl`\n"
+            "- `banff_best_xgb_cls.pkl`\n"
+            "- `banff_scaler.pkl`\n"
+            "- `banff_features.pkl`\n"
+            "- `X_test_scaled.npy`\n"
+            "- `y_reg_test.npy`"
+        )
+        st.stop()
+
+validate_model_feature_alignment()
+
+# ---------------------------------------------------
 # RAG: LOAD KNOWLEDGE + BUILD VECTORIZER
 # ---------------------------------------------------
 @st.cache_resource
@@ -55,7 +100,7 @@ def load_rag_knowledge():
 
     if not os.path.exists(knowledge_path):
         docs = [
-            "This is the Banff parking assistant. The banff_knowledge.txt file is "
+            "This is Gurleen's Banff parking assistant. The banff_knowledge.txt file is "
             "missing, so answers are based only on general parking logic."
         ]
     else:
@@ -94,10 +139,13 @@ def generate_chat_answer(user_question, chat_history):
         {
             "role": "system",
             "content": (
-                "You are a helpful assistant for a Banff parking analytics project. "
-                "You MUST use the provided 'Context' as your main source of truth. "
-                "If the context does not clearly contain the answer, say that directly "
-                "and give a short, reasonable guess based on typical parking behaviour."
+                "You are a friendly project assistant helping Gurleen explain a Banff "
+                "parking analytics project. Speak clearly and simply, as if you are "
+                "presenting to classmates and instructors who are not data scientists. "
+                "Use the provided 'Context' from the project notes as your main source "
+                "of truth. If the context does not clearly contain the answer, say that "
+                "openly and give a short, reasonable guess based on typical parking "
+                "behaviour."
             ),
         },
         {
@@ -127,9 +175,11 @@ def generate_chat_answer(user_question, chat_history):
     except Exception:
         # Friendly fallback when quota is exhausted or API not reachable
         return (
-            "I couldn’t contact the language-model service (this usually means the "
-            "OpenAI API quota or free credits are exhausted for this key).\n\n"
-            "Here is the most relevant information I found in the project notes:\n\n"
+            "I couldn’t contact the language-model service right now "
+            "(this usually means the OpenAI API quota or free credits are used up "
+            "for this key).\n\n"
+            "Here is the most relevant information I can give based only on "
+            "the project notes:\n\n"
             f"{context}"
         )
 
@@ -143,7 +193,7 @@ st.sidebar.markdown(
     - Explore hourly parking demand  
     - Check which lots may be full  
     - Understand the model using XAI  
-    - Chat with a *parking assistant* using RAG  
+    - Chat with a **parking assistant** using RAG  
     """
 )
 
@@ -151,6 +201,7 @@ page = st.sidebar.radio(
     "Go to",
     [
         "Overview",
+        "App Guide – What This Dashboard Does",
         "Make Prediction",
         "Lot Status Overview",
         "XAI – Explainable AI",
@@ -171,17 +222,17 @@ if page == "Overview":
             """
             ### Project Question
 
-            *How can Banff use real data to anticipate parking pressure and avoid full lots during the May–September tourist season?*
+            **How can Banff use real data to anticipate parking pressure and avoid full lots during the May–September tourist season?**
 
             This project combines:
   
-            - *Parking management data* – when and where people park  
-            - *Weather data* – temperature, rain, and wind  
-            - *Engineered features* – hour, weekday/weekend, lagged occupancy, rolling averages  
+            - **Parking management data** – when and where people park  
+            - **Weather data** – temperature, rain, and wind  
+            - **Engineered features** – hour, weekday/weekend, lagged occupancy, rolling averages  
 
-            A Gradient-boosted tree model (*XGBoost*) predicts:
-            - Hourly *occupancy level* for each lot  
-            - *Probability that a lot is near full* (> 90% capacity)  
+            A Gradient-boosted tree model (**XGBoost**) predicts:
+            - Hourly **occupancy level** for each lot  
+            - **Probability that a lot is near full** (> 90% capacity)  
             """
         )
 
@@ -200,9 +251,9 @@ if page == "Overview":
 
         st.markdown(
             """
-            ✅ Models trained on *historical hourly data*  
-            ✅ Includes *time, weather, and history* features  
-            ✅ Deployed as this *Streamlit decision-support app*
+            ✅ Models trained on **historical hourly data**  
+            ✅ Includes **time, weather, and history** features  
+            ✅ Deployed as this **Streamlit decision-support app**
             """
         )
 
@@ -215,9 +266,9 @@ if page == "Overview":
     with col1:
         st.markdown(
             """
-            *1. Make Prediction*  
-            - Choose a *lot & scenario*  
-            - Adjust *time & weather*  
+            **1. Make Prediction**  
+            - Choose a **lot & scenario**  
+            - Adjust **time & weather**  
             - See predicted occupancy & full-lot risk
             """
         )
@@ -225,9 +276,9 @@ if page == "Overview":
     with col2:
         st.markdown(
             """
-            *2. Lot Status Overview*  
-            - Select a *single hour*  
-            - Compare *all lots*  
+            **2. Lot Status Overview**  
+            - Select a **single hour**  
+            - Compare **all lots**  
             - Status: 🟥 High risk full, 🟧 Busy, 🟩 Comfortable  
             - Supports operational decisions & signage
             """
@@ -236,34 +287,223 @@ if page == "Overview":
     with col3:
         st.markdown(
             """
-            *3. XAI – Explainable AI*  
-            - Global *SHAP* feature importance  
-            - *Partial Dependence Plots* (Hour, Month, Temp)  
-            - *Residual plot* to check model fit  
+            **3. XAI – Explainable AI**  
+            - Global **SHAP** feature importance  
+            - **Partial Dependence Plots** (Hour, Month, Temp)  
+            - **Residual plot** to check model fit  
             - Helps justify decisions to stakeholders
             """
         )
 
     st.info(
         "Tip: move between pages using the left sidebar. Start with "
-        "*Make Prediction* to see how the model behaves for different scenarios."
+        "**App Guide** if you want an explanation of all pages; then try "
+        "**Make Prediction** to see how the model behaves for different scenarios."
     )
 
 # ---------------------------------------------------
-# PAGE 2 – MAKE PREDICTION (NO FUTURE GRAPH)
+# PAGE 2 – APP GUIDE (NEW PAGE)
+# ---------------------------------------------------
+if page == "App Guide – What This Dashboard Does":
+    st.title("📘 App Guide – What Each Page Shows")
+
+    st.markdown(
+        """
+        This page is like a tour guide for your dashboard.  
+        It explains, in simple language, what happens on the other pages and
+        how an operator or instructor should use them.
+        """
+    )
+
+    st.markdown("### 🎯 Big Picture – What problem are we solving?")
+    st.markdown(
+        """
+        Banff gets very busy in the tourist season. When parking lots suddenly fill up,
+        visitors get frustrated and traffic becomes messy.
+
+        This dashboard uses **machine learning** to:
+        - Predict **how full each lot will be** at a specific hour  
+        - Estimate the **risk that a lot is near full**  
+        - Help staff **redirect visitors** to quieter lots  
+        - Explain *why* the model thinks a lot will be busy (XAI)
+        """
+    )
+
+    st.markdown("---")
+
+    # --- Make Prediction explanation ---
+    st.subheader("1️⃣ Make Prediction – “What if” for one parking lot")
+    col1, col2 = st.columns([1.4, 1])
+
+    with col1:
+        st.markdown(
+            """
+            On this page you simulate one specific parking lot.
+
+            **Inputs on the left:**
+            - Select a **parking lot** from the list (e.g., *BANFF02 – WOLF AT MARTEN*)  
+            - Pick a **scenario** like *Sunny Weekend Midday* or *Rainy Weekday Afternoon*  
+            - Adjust sliders for:
+              - Month, day of week, hour  
+              - Temperature, rain, and wind  
+
+            **Outputs on the right:**
+            - **Predicted occupancy (model units)** – higher value = more cars  
+            - **Probability the lot is near full** – shown as a percentage  
+            - Colour message:
+              - 🟥 High risk full  
+              - 🟧 Moderate / busy  
+              - 🟩 Low risk  
+
+            You can talk about this page as:  
+            *“Here the operations team can test different ‘what-if’ cases for a single lot
+            before a busy day, so they know where pressure will build up first.”*
+            """
+        )
+
+    with col2:
+        st.markdown("**Good questions to explore on this page:**")
+        st.markdown(
+            """
+            - *What happens to BANFF02 on a sunny Saturday at 2pm?*  
+            - *How does the risk change if the weather is cold and rainy?*  
+            - *Which lot stays comfortable longer in the evening?*
+            """
+        )
+
+    st.markdown("---")
+
+    # --- Lot Status Overview explanation ---
+    st.subheader("2️⃣ Lot Status Overview – Compare all lots at once")
+    col3, col4 = st.columns([1.4, 1])
+
+    with col3:
+        st.markdown(
+            """
+            This page answers: **“At this hour, which lots are in trouble?”**
+
+            **Inputs:**
+            - One set of sliders for **time and weather** (month, day, hour, temp, rain, wind)  
+
+            **Outputs:**
+            - A table where **each row is a parking lot**  
+            - For every lot you see:
+              - Predicted occupancy  
+              - Probability the lot is full  
+              - Status with colour:
+                - 🟥 High risk full (row tinted light red)  
+                - 🟧 Busy (row tinted light orange)  
+                - 🟩 Comfortable (row tinted light green)  
+
+            Lots are shown in **numeric order**, so BANFF02, BANFF03, BANFF04, etc.,
+            are easy to read as a group.
+            """
+        )
+
+    with col4:
+        st.markdown("**How staff could use this page:**")
+        st.markdown(
+            """
+            - Quickly check the **next hour** before a shift starts  
+            - Decide where to place **signs or staff** to redirect cars  
+            - Spot **which lots usually hit high risk first** during busy days
+            """
+        )
+
+    st.markdown("---")
+
+    # --- XAI explanation ---
+    st.subheader("3️⃣ XAI – Explainable AI – Why the model makes these predictions")
+    col5, col6 = st.columns([1.4, 1])
+
+    with col5:
+        st.markdown(
+            """
+            This page is for explaining the **logic behind the model** to instructors,
+            stakeholders, or anyone who asks *“Why should we trust this?”*  
+
+            It includes:
+
+            - **SHAP Summary Plot**  
+              Shows which features (Hour, Month, Weather, etc.) push predictions
+              up or down. Each dot is one observation.
+
+            - **SHAP Bar Plot (Feature Importance)**  
+              Ranks features by how much they influence occupancy overall.
+
+            - **Partial Dependence Plots (PDPs)**  
+              Show the *average effect* of one feature at a time
+              (e.g., how occupancy changes through the day, or by temperature).
+
+            - **Residual Plot**  
+              Compares predicted vs actual values. If the points are spread around
+              the zero line, the model is not heavily biased.
+            """
+        )
+
+    with col6:
+        st.markdown("**Nice talking points here:**")
+        st.markdown(
+            """
+            - *“Hour of the day and month of the year are the strongest drivers.”*  
+            - *“Weather has an effect – on cold or rainy days occupancy is different.”*  
+            - *“Residuals show the model is generally accurate without big bias.”*
+            """
+        )
+
+    st.markdown("---")
+
+    # --- Chat assistant explanation ---
+    st.subheader("4️⃣ Chat Assistant (RAG) – Ask questions in plain English")
+    col7, col8 = st.columns([1.4, 1])
+
+    with col7:
+        st.markdown(
+            """
+            This page turns the project notes into a **question-answer helper**.
+
+            Behind the scenes it:
+            1. Reads lines from `banff_knowledge.txt` (your project notes).  
+            2. Finds the most relevant lines for the user’s question.  
+            3. Uses an OpenAI model to write a friendly answer, grounded in those notes.  
+
+            This is useful when someone asks:
+            - *“Which lots usually get full first?”*  
+            - *“What variables did you include in the model?”*  
+            - *“How did you clean the data?”*
+            """
+        )
+
+    with col8:
+        st.markdown("**Example questions you can type live in class:**")
+        st.markdown(
+            """
+            - *“Explain in simple words how this model predicts parking demand.”*  
+            - *“Why did we choose XGBoost instead of a simple linear model?”*  
+            - *“How could Banff staff actually use these predictions day-to-day?”*
+            """
+        )
+
+    st.success(
+        "During your presentation you can start on this page, give a quick tour of "
+        "each part of the dashboard, and then jump into a live demo on the other pages."
+    )
+
+# ---------------------------------------------------
+# PAGE 3 – MAKE PREDICTION (NO FUTURE GRAPH)
 # ---------------------------------------------------
 if page == "Make Prediction":
     st.title("🎯 Interactive Parking Demand Prediction")
 
     st.markdown(
         """
-        Use this page to explore what-if scenarios for a single Banff parking lot.
+        Use this page to explore *what-if* scenarios for a single Banff parking lot.
 
-        1. Select a *parking lot*  
-        2. Choose a *scenario* (or adjust the sliders)  
+        1. Select a **parking lot**  
+        2. Choose a **scenario** (or adjust the sliders)  
         3. See:
-           - Predicted *occupancy* for the selected hour  
-           - *Probability* the lot is near full  
+           - Predicted **occupancy** for the selected hour  
+           - **Probability** the lot is near full  
         """
     )
 
@@ -342,8 +582,10 @@ if page == "Make Prediction":
     with col2:
         max_temp = st.slider("Max Temperature (°C)",
                              -20.0, 40.0, float(default_vals["max_temp"]))
+
         total_precip = st.slider("Total Precipitation (mm)",
                                  0.0, 30.0, float(default_vals["precip"]))
+
         wind_gust = st.slider("Speed of Max Gust (km/h)",
                               0.0, 100.0, float(default_vals["gust"]))
 
@@ -382,9 +624,19 @@ if page == "Make Prediction":
     x_scaled = scaler.transform(x_vec)
 
     if st.button("🔮 Predict for this scenario"):
-        # Current-hour predictions
-        occ_pred = best_xgb_reg.predict(x_scaled)[0]
-        full_prob = best_xgb_cls.predict_proba(x_scaled)[0, 1]
+        try:
+            # Current-hour predictions
+            occ_pred = float(best_xgb_reg.predict(x_scaled)[0])
+            full_prob = float(best_xgb_cls.predict_proba(x_scaled)[0, 1])
+        except ValueError as e:
+            st.error(
+                "❌ There is a mismatch between the input features and the classifier.\n\n"
+                f"Technical details: `{e}`\n\n"
+                "This usually means `banff_best_xgb_cls.pkl` was trained with a different "
+                "set of features than `banff_features.pkl` / `banff_scaler.pkl`.\n\n"
+                "Please re-export those files together from the same notebook run."
+            )
+            st.stop()
 
         st.subheader("Step 3 – Results for Selected Hour")
 
@@ -398,7 +650,7 @@ if page == "Make Prediction":
 
         if full_prob > 0.7:
             st.warning(
-                "⚠ High risk this lot will be full. Consider redirecting drivers "
+                "⚠️ High risk this lot will be full. Consider redirecting drivers "
                 "to other parking areas or adjusting signage."
             )
         elif full_prob > 0.4:
@@ -412,7 +664,7 @@ if page == "Make Prediction":
             )
 
 # ---------------------------------------------------
-# PAGE 3 – LOT STATUS OVERVIEW (ALL LOTS AT ONCE)
+# PAGE 4 – LOT STATUS OVERVIEW (ALL LOTS AT ONCE)
 # ---------------------------------------------------
 if page == "Lot Status Overview":
     st.title("📊 Lot Status Overview – Which Lots Are Likely Full?")
@@ -421,8 +673,8 @@ if page == "Lot Status Overview":
         """
         This page shows, for a selected hour and conditions, the predicted:
 
-        - *Occupancy* for each parking lot  
-        - *Probability that the lot is near full*  
+        - **Occupancy** for each parking lot  
+        - **Probability that the lot is near full**  
         - Simple status: 🟥 High risk, 🟧 Busy, 🟩 Comfortable
         """
     )
@@ -483,208 +735,3 @@ if page == "Lot Status Overview":
                 base_input["Max Temp (°C)"] = max_temp
             if "Total Precip (mm)" in base_input:
                 base_input["Total Precip (mm)"] = total_precip
-            if "Spd of Max Gust (km/h)" in base_input:
-                base_input["Spd of Max Gust (km/h)"] = wind_gust
-
-            # Loop over each lot, one-hot encode, and predict
-            for lot_feat, lot_name in zip(lot_features, lot_display_names):
-                lot_input = base_input.copy()
-                if lot_feat in lot_input:
-                    lot_input[lot_feat] = 1
-
-                x_vec = np.array([lot_input[f] for f in FEATURES]).reshape(1, -1)
-                x_scaled = scaler.transform(x_vec)
-
-                occ_pred = best_xgb_reg.predict(x_scaled)[0]
-                full_prob = best_xgb_cls.predict_proba(x_scaled)[0, 1]
-
-                if full_prob > 0.7:
-                    status = "🟥 High risk full"
-                elif full_prob > 0.4:
-                    status = "🟧 Busy"
-                else:
-                    status = "🟩 Comfortable"
-
-                rows.append(
-                    {
-                        "Lot": lot_name,
-                        "Predicted occupancy": occ_pred,
-                        "Probability full": full_prob,
-                        "Status": status,
-                    }
-                )
-
-            df = pd.DataFrame(rows)
-            # sort by lot name so numbers are in sequence
-            df = df.sort_values("Lot")
-
-            st.subheader("Step 2 – Lot status for selected hour")
-            st.dataframe(
-                df.style.format(
-                    {"Predicted occupancy": "{:.2f}", "Probability full": "{:.1%}"}
-                ),
-                use_container_width=True,
-            )
-
-            st.caption(
-                "Lots are shown in numeric order (BANFF02, BANFF03, …). "
-                "You can change the sort in the code if you prefer to see "
-                "the highest-risk lots at the top."
-            )
-
-# ---------------------------------------------------
-# PAGE 4 – XAI (EXPLAINABLE AI)
-# ---------------------------------------------------
-if page == "XAI – Explainable AI":
-    st.title("🔍 Explainable AI – Understanding the Models")
-
-    st.markdown(
-        """
-        This page explains *why* the models make their predictions,
-        using Explainable AI tools:
-
-        - *SHAP summary plot*: which features contribute most to predictions  
-        - *SHAP bar plot*: overall feature importance  
-        - *Partial Dependence Plots (PDPs)*: effect of one feature at a time  
-        - *Residual plot*: how close predictions are to the true values  
-        """
-    )
-
-    # ---------- SHAP EXPLANATIONS FOR REGRESSION ----------
-    st.subheader("SHAP Summary – Regression Model (Occupancy)")
-
-    try:
-        explainer_reg = shap.TreeExplainer(best_xgb_reg)
-        shap_values_reg = explainer_reg.shap_values(X_test_scaled)
-
-        # Summary dot plot
-        fig1, ax1 = plt.subplots()
-        shap.summary_plot(
-            shap_values_reg,
-            X_test_scaled,
-            feature_names=FEATURES,
-            show=False
-        )
-        st.pyplot(fig1)
-        st.caption(
-            "Each point represents a sample. Colour shows feature value, and position "
-            "shows how much that feature pushed the prediction up or down."
-        )
-
-        # Summary bar plot
-        st.subheader("SHAP Feature Importance – Regression")
-        fig2, ax2 = plt.subplots()
-        shap.summary_plot(
-            shap_values_reg,
-            X_test_scaled,
-            feature_names=FEATURES,
-            plot_type="bar",
-            show=False
-        )
-        st.pyplot(fig2)
-    except Exception as e:
-        st.error(f"Could not generate SHAP plots: {e}")
-
-    # ---------- PARTIAL DEPENDENCE PLOTS ----------
-    st.subheader("Partial Dependence – Key Features")
-
-    pd_feature_names = []
-    for name in ["Max Temp (°C)", "Month", "Hour"]:
-        if name in FEATURES:
-            pd_feature_names.append(name)
-
-    if len(pd_feature_names) > 0:
-        feature_indices = [FEATURES.index(f) for f in pd_feature_names]
-        fig3, ax3 = plt.subplots(figsize=(10, 4))
-        PartialDependenceDisplay.from_estimator(
-            best_xgb_reg,
-            X_test_scaled,
-            feature_indices,
-            feature_names=FEATURES,
-            ax=ax3
-        )
-        st.pyplot(fig3)
-        st.caption(
-            "Partial dependence shows the average effect of each feature on predicted "
-            "occupancy while holding other features constant."
-        )
-    else:
-        st.info(
-            "Could not find the configured PDP features ('Max Temp (°C)', 'Month', 'Hour') "
-            "in the FEATURES list. You may need to adjust the feature names."
-        )
-
-    # ---------- RESIDUAL ANALYSIS ----------
-    st.subheader("Residual Plot – Regression Model")
-
-    try:
-        y_pred = best_xgb_reg.predict(X_test_scaled)
-        residuals = y_reg_test - y_pred
-
-        fig4, ax4 = plt.subplots()
-        ax4.scatter(y_pred, residuals, alpha=0.3)
-        ax4.axhline(0, color="red", linestyle="--")
-        ax4.set_xlabel("Predicted Occupancy")
-        ax4.set_ylabel("Residual (Actual - Predicted)")
-        st.pyplot(fig4)
-        st.caption(
-            "Residuals scattered symmetrically around zero suggest that the model "
-            "captures the main patterns without strong systematic bias."
-        )
-    except Exception as e:
-        st.error(f"Could not compute residuals: {e}")
-
-# ---------------------------------------------------
-# PAGE 5 – CHAT ASSISTANT (RAG)
-# ---------------------------------------------------
-if page == "💬 Chat Assistant (RAG)":
-    st.title("💬 Banff Parking Chat Assistant (RAG)")
-
-    st.markdown(
-        """
-        Ask questions about parking patterns, busy times, or model behaviour.
-
-        This chatbot uses *RAG (Retrieval-Augmented Generation)*:
-        1. It first retrieves relevant lines from your banff_knowledge.txt file  
-        2. Then it uses an OpenAI model to answer, grounded in that context  
-        """
-    )
-
-    # Initialize chat history
-    if "rag_chat_history" not in st.session_state:
-        st.session_state.rag_chat_history = []
-
-    # Show previous messages
-    for msg in st.session_state.rag_chat_history:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-
-    # User input
-    user_input = st.chat_input("Ask something about Banff parking...")
-
-    if user_input:
-        # Add user message to history
-        st.session_state.rag_chat_history.append(
-            {"role": "user", "content": user_input}
-        )
-        with st.chat_message("user"):
-            st.markdown(user_input)
-
-        # Assistant response
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking with project context..."):
-                answer = generate_chat_answer(
-                    user_input,
-                    st.session_state.rag_chat_history,
-                )
-                st.markdown(answer)
-
-        st.session_state.rag_chat_history.append(
-            {"role": "assistant", "content": answer}
-        )
-
-        st.caption(
-        "Tip: edit banff_knowledge.txt in your repo to control what the chatbot knows "
-        "about your EDA, feature engineering, and model findings."
-    )
-
